@@ -52,20 +52,50 @@ const actionMap = {
 };
 
 /*
- * Calculates new dimension for a window resize
+ * Creates a clamper for resize/move
  */
-const getNewDimensions = (diffX, diffY, min, max, start) => {
-  const newWidth = Math.max(min.width, start.width + diffX);
-  const newHeight = Math.max(min.height, start.height + diffY);
+const clamper = (win, rect) => {
+  const maxDimension = Object.assign({}, win.attributes.maxDimension);
+  const minDimension = Object.assign({}, win.attributes.minDimension);
+  const startPosition = Object.assign({}, win.state.position);
+  const startDimension = Object.assign({}, win.state.dimension);
+  const maxPosition = {
+    left: startPosition.left + startDimension.width - minDimension.width,
+    top: startPosition.top + startDimension.height - minDimension.height
+  };
 
-  return {
-    width: max.width === -1
-      ? newWidth
-      : Math.min(max.height, newWidth),
+  const clamp = (min, max, current) => {
+    const value = min === -1 ? current : Math.max(min, current);
+    return max === -1 ? value : Math.min(max, value);
+  };
 
-    height: max.height === -1
-      ? newHeight
-      : Math.min(max.height, newHeight)
+  return ({width, height, top, left}) => ({
+    width: clamp(minDimension.width, maxDimension.width, width),
+    height: clamp(minDimension.height, maxDimension.height, height),
+    top: clamp(-1, maxPosition.top, top),
+    left: clamp(-1, maxPosition.left, left)
+  });
+};
+
+/*
+ * Creates a resize handler
+ */
+const resizer = (win, rect, handle) => {
+  const clamp = clamper(win, rect);
+  const startDimension = Object.assign({}, win.state.dimension);
+  const startPosition = Object.assign({}, win.state.position);
+  const directions = handle.getAttribute('data-direction').split('');
+  const going = dir => directions.indexOf(dir) !== -1;
+  const xDir = going('e') ? 1 : (going('w') ? -1 : 0);
+  const yDir = going('s') ? 1 : (going('n') ? -1 : 0);
+
+  return (diffX, diffY) => {
+    const width = startDimension.width + (diffX * xDir);
+    const height = startDimension.height + (diffY * yDir);
+    const top = yDir === -1 ? startPosition.top + diffY : startPosition.top;
+    const left = xDir === -1 ? startPosition.left + diffX : startPosition.left;
+
+    return clamp({width, height, top, left});
   };
 };
 
@@ -230,9 +260,6 @@ export default class WindowBehavior {
   mousedown(ev, win) {
     const {clientX, clientY, touch, target} = getEvent(ev);
     const startPosition = Object.assign({}, win.state.position);
-    const startDimension = Object.assign({}, win.state.dimension);
-    const maxDimension = Object.assign({}, win.attributes.maxDimension);
-    const minDimension = Object.assign({}, win.attributes.minDimension);
     const resize = target.classList.contains('osjs-window-resize');
     const move = ev.ctrlKey
       ? win.$element.contains(target)
@@ -242,6 +269,8 @@ export default class WindowBehavior {
       : null;
 
     let attributeSet = false;
+
+    const resizeHandler = resize ? resizer(win, rect, target) : null;
 
     const mousemove = (ev) => {
       if (!isPassive) {
@@ -254,23 +283,18 @@ export default class WindowBehavior {
 
       if (resize) {
         this.wasResized = true;
+
+        const {width, height, top, left} = resizeHandler(diffX, diffY);
         win._setState('resizing', true, false);
-        win.setDimension(getNewDimensions(
-          diffX,
-          diffY,
-          minDimension,
-          maxDimension,
-          startDimension
-        ));
+        win._setState('dimension', {width, height}, false);
+        win._setState('position', {top, left}, false);
+        win._updateDOM();
       } else if (move) {
         this.wasMoved = true;
+
+        const position = getNewPosition(diffX, diffY, startPosition, rect);
         win._setState('moving', true, false);
-        win.setPosition(getNewPosition(
-          diffX,
-          diffY,
-          startPosition,
-          rect
-        ));
+        win.setPosition(position);
 
         /* TODO: Might give better performance, but need to set actual position
          * on mouseup. Also, need to clamp the diffX and diffY with respect of
