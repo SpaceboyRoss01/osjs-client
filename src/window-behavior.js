@@ -55,13 +55,12 @@ const actionMap = {
  * Creates a clamper for resize/move
  */
 const clamper = (win, rect) => {
-  const maxDimension = Object.assign({}, win.attributes.maxDimension);
-  const minDimension = Object.assign({}, win.attributes.minDimension);
-  const startPosition = Object.assign({}, win.state.position);
-  const startDimension = Object.assign({}, win.state.dimension);
+  const {maxDimension, minDimension} = win.attributes;
+  const {position, dimension} = win.state;
+
   const maxPosition = {
-    left: startPosition.left + startDimension.width - minDimension.width,
-    top: startPosition.top + startDimension.height - minDimension.height
+    left: position.left + dimension.width - minDimension.width,
+    top: position.top + dimension.height - minDimension.height
   };
 
   const clamp = (min, max, current) => {
@@ -82,25 +81,24 @@ const clamper = (win, rect) => {
  */
 const resizer = (win, rect, handle) => {
   const clamp = clamper(win, rect);
-  const startDimension = Object.assign({}, win.state.dimension);
-  const startPosition = Object.assign({}, win.state.position);
+  const {position, dimension} = win.state;
   const directions = handle.getAttribute('data-direction').split('');
   const going = dir => directions.indexOf(dir) !== -1;
   const xDir = going('e') ? 1 : (going('w') ? -1 : 0);
   const yDir = going('s') ? 1 : (going('n') ? -1 : 0);
 
   return (diffX, diffY) => {
-    const width = startDimension.width + (diffX * xDir);
-    const height = startDimension.height + (diffY * yDir);
-    const top = yDir === -1 ? startPosition.top + diffY : startPosition.top;
-    const left = xDir === -1 ? startPosition.left + diffX : startPosition.left;
+    const width = dimension.width + (diffX * xDir);
+    const height = dimension.height + (diffY * yDir);
+    const top = yDir === -1 ? position.top + diffY : position.top;
+    const left = xDir === -1 ? position.left + diffX : position.left;
 
     return clamp({width, height, top, left});
   };
 };
 
 /*
- * Calculates new position for a window movement
+ * Creates a movement handler
  */
 const getNewPosition = (diffX, diffY, start, rect) => {
   let top = start.top + diffY;
@@ -181,8 +179,8 @@ export default class WindowBehavior {
    */
   constructor(core) {
     this.core = core;
-    this.wasMoved = false;
-    this.wasResized = false;
+
+    this.lastAction = null;
   }
 
   /**
@@ -215,7 +213,7 @@ export default class WindowBehavior {
    * @param {Window} win Window reference
    */
   click(ev, win) {
-    if (this.wasMoved || this.wasResized) {
+    if (this.lastAction) {
       return;
     }
 
@@ -234,7 +232,7 @@ export default class WindowBehavior {
    * @param {Window} win Window reference
    */
   dblclick(ev, win) {
-    if (this.wasMoved || this.wasResized) {
+    if (this.lastAction) {
       return;
     }
 
@@ -258,17 +256,18 @@ export default class WindowBehavior {
    * @param {Window} win Window reference
    */
   mousedown(ev, win) {
+    let attributeSet = false;
     const {clientX, clientY, touch, target} = getEvent(ev);
     const startPosition = Object.assign({}, win.state.position);
     const resize = target.classList.contains('osjs-window-resize');
+
     const move = ev.ctrlKey
       ? win.$element.contains(target)
       : target.classList.contains('osjs-window-header');
+
     const rect = this.core.has('osjs/desktop')
       ? this.core.make('osjs/desktop').getRect()
       : null;
-
-    let attributeSet = false;
 
     const resizeHandler = resize ? resizer(win, rect, target) : null;
 
@@ -282,28 +281,27 @@ export default class WindowBehavior {
       const diffY = transformedEvent.clientY - clientY;
 
       if (resize) {
-        this.wasResized = true;
-
         const {width, height, top, left} = resizeHandler(diffX, diffY);
-        win._setState('resizing', true, false);
         win._setState('dimension', {width, height}, false);
         win._setState('position', {top, left}, false);
-        win._updateDOM();
-      } else if (move) {
-        this.wasMoved = true;
 
+        this.lastAction = 'resize';
+      } else if (move) {
         const position = getNewPosition(diffX, diffY, startPosition, rect);
-        win._setState('moving', true, false);
-        win.setPosition(position);
+        win._setState('position', position, false);
 
         /* TODO: Might give better performance, but need to set actual position
          * on mouseup. Also, need to clamp the diffX and diffY with respect of
          * rect.
         win.$element.style.transform = `translate(${diffX}px, ${diffY}px)`;
         */
+        this.lastAction = 'move';
       }
 
-      if (resize || move) {
+      if (this.lastAction) {
+        win._setState(this.lastAction === 'move' ? 'moving' : 'resizing', true, false);
+        win._updateDOM();
+
         if (!attributeSet) {
           this.core.$root.setAttribute('data-window-action', String(true));
           attributeSet = true;
@@ -322,10 +320,10 @@ export default class WindowBehavior {
 
       win._setState('media', getMediaQueryName(win), false);
 
-      if (this.wasMoved) {
+      if (this.lastAction === 'move') {
         win.emit('moved', Object.assign({}, win.state.position), win);
         win._setState('moving', false);
-      } else if (this.wasResized) {
+      } else if (this.lastAction === 'resize') {
         win.emit('resized', Object.assign({}, win.state.dimension), win);
         win._setState('resizing', false);
       }
@@ -348,8 +346,7 @@ export default class WindowBehavior {
       }
     }
 
-    this.wasResized = false;
-    this.wasMoved = false;
+    this.lastAction = null;
 
     if (this.core.has('osjs/contextmenu')) {
       this.core.make('osjs/contextmenu').hide();
