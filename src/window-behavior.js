@@ -54,7 +54,7 @@ const actionMap = {
 /*
  * Creates a clamper for resize/move
  */
-const clamper = (win, rect) => {
+const clamper = win => {
   const {maxDimension, minDimension} = win.attributes;
   const {position, dimension} = win.state;
 
@@ -79,8 +79,8 @@ const clamper = (win, rect) => {
 /*
  * Creates a resize handler
  */
-const resizer = (win, rect, handle) => {
-  const clamp = clamper(win, rect);
+const resizer = (win, handle) => {
+  const clamp = clamper(win);
   const {position, dimension} = win.state;
   const directions = handle.getAttribute('data-direction').split('');
   const going = dir => directions.indexOf(dir) !== -1;
@@ -269,7 +269,7 @@ export default class WindowBehavior {
       ? this.core.make('osjs/desktop').getRect()
       : null;
 
-    const resizeHandler = resize ? resizer(win, rect, target) : null;
+    const resizeHandler = resize ? resizer(win, target) : null;
 
     const mousemove = (ev) => {
       if (!isPassive) {
@@ -277,8 +277,10 @@ export default class WindowBehavior {
       }
 
       const transformedEvent = getEvent(ev);
-      const diffX = transformedEvent.clientX - clientX;
-      const diffY = transformedEvent.clientY - clientY;
+      const posX = resize ? Math.max(rect.left, transformedEvent.clientX) : transformedEvent.clientX;
+      const posY = resize ? Math.max(rect.top, transformedEvent.clientY) : transformedEvent.clientY;
+      const diffX = posX - clientX;
+      const diffY = posY - clientY;
 
       if (resize) {
         const {width, height, top, left} = resizeHandler(diffX, diffY);
