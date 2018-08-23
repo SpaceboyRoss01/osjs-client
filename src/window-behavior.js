@@ -40,17 +40,9 @@ const touchArg = isPassive ? {passive: true} : false;
  * Map of available "actions"
  */
 const actionMap = {
-  maximize(win) {
-    if (!win.maximize()) {
-      win.restore();
-    }
-  },
-  minimize(win) {
-    win.minimize();
-  },
-  close(win) {
-    win.close();
-  }
+  maximize: (win) => win.maximize() ? null : win.restore(),
+  minimize: (win) => win.minimize(),
+  close: (win) => win.close()
 };
 
 /*
@@ -117,8 +109,8 @@ const mover = (win, rect) => {
  * Calculates a new initial position for window
  */
 const getCascadePosition = (win, rect, pos) => {
-  const startX = CASCADE_DISTANCE + (rect ? rect.left : 0);
-  const startY = CASCADE_DISTANCE + (rect ? rect.top : 0);
+  const startX = CASCADE_DISTANCE + rect.left;
+  const startY = CASCADE_DISTANCE + rect.top;
   const distance = CASCADE_DISTANCE;
   const wrap = CASCADE_DISTANCE * 2;
 
@@ -199,7 +191,7 @@ export default class WindowBehavior {
 
     const rect = this.core.has('osjs/desktop')
       ? this.core.make('osjs/desktop').getRect()
-      : null;
+      : {top: 0, left: 0};
 
     const {top, left} = getCascadePosition(win, rect, win.state.position);
     win.state.position.top = top;
