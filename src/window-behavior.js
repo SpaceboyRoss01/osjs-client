@@ -100,16 +100,15 @@ const resizer = (win, handle) => {
 /*
  * Creates a movement handler
  */
-const getNewPosition = (diffX, diffY, start, rect) => {
-  let top = start.top + diffY;
-  let left = start.left + diffX;
+const mover = (win, rect) => {
+  const {position} = win.state;
 
-  if (rect) {
-    // In case we have panels etc around, we want to stop when we hit these areas
-    top = Math.max(rect.top, top);
-  }
+  return (diffX, diffY) => {
+    const top = Math.max(position.top + diffY, rect.top);
+    const left = position.left + diffX;
 
-  return {top, left};
+    return {top, left};
+  };
 };
 
 /*
@@ -257,19 +256,24 @@ export default class WindowBehavior {
    */
   mousedown(ev, win) {
     let attributeSet = false;
-    const {clientX, clientY, touch, target} = getEvent(ev);
-    const startPosition = Object.assign({}, win.state.position);
-    const resize = target.classList.contains('osjs-window-resize');
 
-    const move = ev.ctrlKey
+    const {clientX, clientY, touch, target} = getEvent(ev);
+
+    const checkMove = ev.ctrlKey
       ? win.$element.contains(target)
       : target.classList.contains('osjs-window-header');
 
     const rect = this.core.has('osjs/desktop')
       ? this.core.make('osjs/desktop').getRect()
+      : {top: 0, left: 0};
+
+    const resize = target.classList.contains('osjs-window-resize')
+      ? resizer(win, target)
       : null;
 
-    const resizeHandler = resize ? resizer(win, target) : null;
+    const move = checkMove
+      ? mover(win, rect)
+      : null;
 
     const mousemove = (ev) => {
       if (!isPassive) {
@@ -283,26 +287,22 @@ export default class WindowBehavior {
       const diffY = posY - clientY;
 
       if (resize) {
-        const {width, height, top, left} = resizeHandler(diffX, diffY);
+        const {width, height, top, left} = resize(diffX, diffY);
+
         win._setState('dimension', {width, height}, false);
         win._setState('position', {top, left}, false);
 
         this.lastAction = 'resize';
       } else if (move) {
-        const position = getNewPosition(diffX, diffY, startPosition, rect);
+        const position = move(diffX, diffY);
+
         win._setState('position', position, false);
 
-        /* TODO: Might give better performance, but need to set actual position
-         * on mouseup. Also, need to clamp the diffX and diffY with respect of
-         * rect.
-        win.$element.style.transform = `translate(${diffX}px, ${diffY}px)`;
-        */
         this.lastAction = 'move';
       }
 
       if (this.lastAction) {
-        win._setState(this.lastAction === 'move' ? 'moving' : 'resizing', true, false);
-        win._updateDOM();
+        win._setState(this.lastAction === 'move' ? 'moving' : 'resizing', true); // NOTE: This also updates DOM!
 
         if (!attributeSet) {
           this.core.$root.setAttribute('data-window-action', String(true));
