@@ -31,6 +31,8 @@
 import {supportsPassive} from './utils/dom.js';
 import * as mediaQuery from 'css-mediaquery';
 
+const CASCADE_DISTANCE = 10;
+
 const isPassive = supportsPassive();
 const touchArg = isPassive ? {passive: true} : false;
 
@@ -115,10 +117,10 @@ const mover = (win, rect) => {
  * Calculates a new initial position for window
  */
 const getCascadePosition = (win, rect, pos) => {
-  const startX = 10 + (rect ? rect.left : 0);
-  const startY = 10 + (rect ? rect.top : 0);
-  const distance = 10;
-  const wrap = 20;
+  const startX = CASCADE_DISTANCE + (rect ? rect.left : 0);
+  const startY = CASCADE_DISTANCE + (rect ? rect.top : 0);
+  const distance = CASCADE_DISTANCE;
+  const wrap = CASCADE_DISTANCE * 2;
 
   const newX = startX + ((win.wid % wrap) * distance);
   const newY = startY + ((win.wid % wrap) * distance);
