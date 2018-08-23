@@ -68,7 +68,7 @@ const clamper = win => {
     return max === -1 ? value : Math.min(max, value);
   };
 
-  return ({width, height, top, left}) => ({
+  return (width, height, top, left) => ({
     width: clamp(minDimension.width, maxDimension.width, width),
     height: clamp(minDimension.height, maxDimension.height, height),
     top: clamp(-1, maxPosition.top, top),
@@ -93,7 +93,7 @@ const resizer = (win, handle) => {
     const top = yDir === -1 ? position.top + diffY : position.top;
     const left = xDir === -1 ? position.left + diffX : position.left;
 
-    return clamp({width, height, top, left});
+    return clamp(width, height, top, left);
   };
 };
 
